@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Editor & Reader</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1e1e2e;
+            --bg-surface: #2a2a3c;
+            --accent-primary: #89b4fa;
+            --accent-hover: #b4befe;
+            --text-primary: #cdd6f4;
+            --text-secondary: #a6adc8;
+            --border-color: #45475a;
+            --button-bg: #313244;
+            --button-hover: #45475a;
+        }
+
+        body {
+            font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+            -webkit-app-region: drag;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .app-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+
+        .file-name {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            -webkit-app-region: no-drag;
+        }
+
+        .btn {
+            background: var(--button-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--button-hover);
+            border-color: var(--accent-primary);
+        }
+
+        .mode-toggle {
+            display: flex;
+            background: var(--button-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .mode-btn {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .mode-btn.active {
+            background: var(--accent-primary);
+            color: var(--bg-primary);
+        }
+
+        .mode-btn:hover:not(.active) {
+            background: var(--button-hover);
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            color: var(--text-secondary);
+            gap: 16px;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 16px;
+        }
+
+        .empty-state-hint {
+            font-size: 13px;
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        .reading-view {
+            display: none;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            padding: 48px 24px;
+        }
+
+        .reading-view.active {
+            display: block;
+        }
+
+        .reading-content {
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        .edit-view {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        .edit-view.active {
+            display: flex;
+        }
+
+        .editor-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color);
+            min-width: 0;
+        }
+
+        .pane-header {
+            padding: 10px 16px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+
+        .editor-textarea {
+            flex: 1;
+            background: var(--bg-primary);
+            border: none;
+            color: var(--text-primary);
+            padding: 16px;
+            font-family: "Fira Code", "Cascadia Code", Consolas, monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            overflow-y: auto;
+        }
+
+        .editor-textarea::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        .preview-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .preview-content {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+        }
+
+        .preview-content h1, .preview-content h2, .preview-content h3,
+        .preview-content h4, .preview-content h5, .preview-content h6 {
+            color: var(--accent-primary);
+            margin: 1.5em 0 0.5em;
+            line-height: 1.3;
+        }
+
+        .preview-content h1 { font-size: 2em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
+        .preview-content h2 { font-size: 1.5em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
+        .preview-content h3 { font-size: 1.25em; }
+        .preview-content h4 { font-size: 1em; }
+
+        .preview-content p {
+            margin: 1em 0;
+        }
+
+        .preview-content a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+
+        .preview-content a:hover {
+            text-decoration: underline;
+        }
+
+        .preview-content code {
+            background: var(--bg-surface);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: "Fira Code", monospace;
+            font-size: 0.9em;
+        }
+
+        .preview-content pre {
+            background: var(--bg-surface);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+
+        .preview-content pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .preview-content blockquote {
+            border-left: 4px solid var(--accent-primary);
+            padding-left: 16px;
+            margin: 1em 0;
+            color: var(--text-secondary);
+        }
+
+        .preview-content ul, .preview-content ol {
+            margin: 1em 0;
+            padding-left: 2em;
+        }
+
+        .preview-content li {
+            margin: 0.5em 0;
+        }
+
+        .preview-content hr {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 2em 0;
+        }
+
+        .preview-content img {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+
+        .preview-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+        }
+
+        .preview-content th, .preview-content td {
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .preview-content th {
+            background: var(--bg-surface);
+        }
+
+        .preview-content strong {
+            color: var(--accent-hover);
+        }
+
+        .preview-content em {
+            font-style: italic;
+        }
+
+        .preview-content del {
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <span class="app-title">Markdown</span>
+            <span class="file-name" id="fileName"></span>
+        </div>
+        <div class="header-right">
+            <button class="btn" id="openBtn">打开</button>
+            <button class="btn" id="saveBtn">保存</button>
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="readModeBtn">阅读</button>
+                <button class="mode-btn" id="editModeBtn">编辑</button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="empty-state" id="emptyState">
+            <div class="empty-state-icon">📄</div>
+            <div class="empty-state-text">打开一个 Markdown 文件开始阅读</div>
+            <div class="empty-state-hint">使用 Ctrl+O 打开文件，Ctrl+E 切换编辑模式</div>
+        </div>
+
+        <div class="reading-view" id="readingView">
+            <div class="reading-content" id="readingContent"></div>
+        </div>
+
+        <div class="edit-view" id="editView">
+            <div class="editor-pane">
+                <div class="pane-header">Markdown 源码</div>
+                <textarea class="editor-textarea" id="editorTextarea" placeholder="在此输入 Markdown 内容..."></textarea>
+            </div>
+            <div class="preview-pane">
+                <div class="pane-header">预览</div>
+                <div class="preview-content" id="previewContent"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const emptyState = document.getElementById('emptyState');
+        const readingView = document.getElementById('readingView');
+        const editView = document.getElementById('editView');
+        const readingContent = document.getElementById('readingContent');
+        const previewContent = document.getElementById('previewContent');
+        const editorTextarea = document.getElementById('editorTextarea');
+        const fileNameDisplay = document.getElementById('fileName');
+        const readModeBtn = document.getElementById('readModeBtn');
+        const editModeBtn = document.getElementById('editModeBtn');
+        const openBtn = document.getElementById('openBtn');
+        const saveBtn = document.getElementById('saveBtn');
+
+        let currentMode = 'reading';
+        let currentContent = '';
+        let currentFileName = null;
+        let debounceTimer = null;
+
+        function parseMarkdown(text) {
+            if (!text) return '';
+
+            let html = text;
+
+            html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+            html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+            html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+            html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+            html = html.replace(/^#### (.*$)/gm, '<h4>$1</h4>');
+            html = html.replace(/^##### (.*$)/gm, '<h5>$1</h5>');
+            html = html.replace(/^###### (.*$)/gm, '<h6>$1</h6>');
+
+            html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+            html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+            html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+
+            html = html.replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>');
+
+            html = html.replace(/^[-*] (.*$)/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+
+            html = html.replace(/^\d+\. (.*$)/gm, '<li>$1</li>');
+
+            html = html.replace(/^---$/gm, '<hr>');
+
+            const lines = html.split('\n');
+            const processedLines = [];
+            let inTable = false;
+            let tableRows = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                if (line.match(/^\|.*\|$/)) {
+                    if (!inTable) {
+                        inTable = true;
+                        tableRows = [];
+                    }
+                    if (!line.match(/^\|[-:\s]+\|$/)) {
+                        tableRows.push(line);
+                    }
+                } else {
+                    if (inTable) {
+                        processedLines.push(renderTable(tableRows));
+                        inTable = false;
+                        tableRows = [];
+                    }
+                    processedLines.push(line);
+                }
+            }
+
+            if (inTable) {
+                processedLines.push(renderTable(tableRows));
+            }
+
+            html = processedLines.join('\n');
+
+            html = html.replace(/\n\n/g, '</p><p>');
+            html = '<p>' + html + '</p>';
+            html = html.replace(/<p><(h[1-6]|pre|blockquote|ul|ol|hr|img)/g, '<$1');
+            html = html.replace(/<\/(h[1-6]|pre|blockquote|ul|ol|hr)><\/p>/g, '</$1>');
+            html = html.replace(/<p><\/p>/g, '');
+            html = html.replace(/<hr><\/p>/g, '<hr>');
+            html = html.replace(/<blockquote><\/blockquote>/g, '');
+
+            return html;
+        }
+
+        function renderTable(rows) {
+            if (rows.length === 0) return '';
+
+            let html = '<table>';
+            rows.forEach((row, index) => {
+                const cells = row.split('|').filter(c => c.trim());
+                const tag = index === 0 ? 'th' : 'td';
+                html += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
+            });
+            html += '</table>';
+            return html;
+        }
+
+        function updatePreview() {
+            const text = editorTextarea.value;
+            previewContent.innerHTML = parseMarkdown(text);
+        }
+
+        function debouncedUpdatePreview() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(updatePreview, 150);
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+
+            if (mode === 'reading') {
+                readModeBtn.classList.add('active');
+                editModeBtn.classList.remove('active');
+                editView.classList.remove('active');
+                readingView.classList.add('active');
+                readingContent.innerHTML = parseMarkdown(editorTextarea.value);
+            } else {
+                readModeBtn.classList.remove('active');
+                editModeBtn.classList.add('active');
+                readingView.classList.remove('active');
+                editView.classList.add('active');
+                updatePreview();
+            }
+
+            if (currentContent || currentFileName) {
+                emptyState.style.display = 'none';
+            } else {
+                emptyState.style.display = 'flex';
+            }
+        }
+
+        async function handleOpenFile() {
+            const result = await window.electronAPI.openFile();
+            if (result) {
+                currentContent = result.content;
+                currentFileName = result.filePath.split(/[/\\]/).pop();
+                editorTextarea.value = currentContent;
+                fileNameDisplay.textContent = currentFileName;
+                emptyState.style.display = 'none';
+                setMode('reading');
+                readingContent.innerHTML = parseMarkdown(currentContent);
+            }
+        }
+
+        async function handleSaveFile() {
+            const content = editorTextarea.value;
+            const savedPath = await window.electronAPI.saveFile(content);
+            if (savedPath) {
+                currentFileName = savedPath.split(/[/\\]/).pop();
+                fileNameDisplay.textContent = currentFileName;
+            }
+        }
+
+        openBtn.addEventListener('click', handleOpenFile);
+        saveBtn.addEventListener('click', handleSaveFile);
+
+        readModeBtn.addEventListener('click', () => setMode('reading'));
+        editModeBtn.addEventListener('click', () => setMode('edit'));
+
+        editorTextarea.addEventListener('input', debouncedUpdatePreview);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'o') {
+                    e.preventDefault();
+                    handleOpenFile();
+                } else if (e.key === 's') {
+                    e.preventDefault();
+                    handleSaveFile();
+                } else if (e.key === 'e') {
+                    e.preventDefault();
+                    setMode(currentMode === 'reading' ? 'edit' : 'reading');
+                }
+            }
+        });
+
+        window.electronAPI.onFileOpened((data) => {
+            currentContent = data.content;
+            currentFileName = data.filePath.split(/[/\\]/).pop();
+            editorTextarea.value = currentContent;
+            fileNameDisplay.textContent = currentFileName;
+            emptyState.style.display = 'none';
+            setMode('reading');
+            readingContent.innerHTML = parseMarkdown(currentContent);
+        });
+
+        setMode('reading');
+    </script>
+</body>
+</html>
