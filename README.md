@@ -4,25 +4,26 @@
 
 ## 功能特性
 
-### 📖 阅读模式
+### 阅读模式
 - 默认以阅读模式打开 Markdown 文件
-- 优雅的深色主题界面
-- 居中显示，专注阅读体验
+- 优雅的深色主题界面 (Catppuccin 风格)
+- 居中显示，最大宽度 800px，专注阅读体验
 
-### ✏️ 编辑模式
-- 左右分栏布局：左侧编辑，右侧实时预览
-- 支持实时 Markdown 渲染
-- 支持多种 Markdown 语法：标题、粗体、斜体、代码块、引用、列表、表格等
+### 编辑模式
+- 左右分栏布局（50/50）：左侧编辑，右侧实时预览
+- 150ms 防抖实时渲染
+- 支持多种 Markdown 语法：标题、粗体、斜体、代码块、引用、列表、表格、删除线等
 
-### 📁 文件操作
+### 文件操作
 - 支持打开 `.md`、`.markdown`、`.txt` 文件
 - 支持保存和另存为
 - 安装后自动关联 `.md` 文件，双击即可打开
+- 单实例锁定，重复打开文件会聚焦到已有窗口
 
-### ⌨️ 快捷键支持
-- `Ctrl + O` - 打开文件
-- `Ctrl + S` - 保存文件
-- `Ctrl + E` - 切换阅读/编辑模式
+### 快捷键
+- `Ctrl + O` — 打开文件
+- `Ctrl + S` — 保存文件
+- `Ctrl + E` — 切换阅读/编辑模式
 
 ## 安装方法
 
@@ -41,8 +42,9 @@
 
 ### 便携版本
 
-也可以使用便携版本，无需安装：
-- 下载 `Markdown Editor 1.0.0.exe`（Portable 版本）
+也可使用便携版本，无需安装：
+- 运行 `npm run build:dir` 构建
+- 在 `installer/` 目录下找到免安装版本
 - 直接运行即可
 
 ## 使用说明
@@ -67,8 +69,9 @@
 
 - **框架**: Electron
 - **语言**: JavaScript (ES6+)
-- **样式**: CSS3
-- **构建工具**: electron-builder
+- **样式**: CSS3 (CSS 自定义属性实现深色主题)
+- **Markdown 解析**: 自定义正则解析器（无外部依赖）
+- **构建工具**: electron-builder (NSIS 安装包)
 
 ## 开发
 
@@ -83,6 +86,12 @@
 npm install
 ```
 
+如果下载 Electron 较慢，可使用国内镜像：
+
+```bash
+ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" npm install
+```
+
 ### 开发模式
 
 ```bash
@@ -92,23 +101,34 @@ npm start
 ### 构建
 
 ```bash
-# 构建目录版本
+# 构建目录版本（免安装）
 npm run build:dir
 
-# 构建安装包
+# 构建 NSIS 安装包
 npm run build
 ```
+
+构建产物输出到 `installer/` 目录。
 
 ## 项目结构
 
 ```
-markdown-editor-reader/
-├── main.js          # Electron 主进程
-├── preload.js       # 预加载脚本
-├── index.html       # 渲染进程界面
-├── package.json     # 项目配置
-└── installer/       # 安装包输出目录
+markdown/
+├── main.js                   # Electron 主进程（窗口管理、文件 I/O、IPC）
+├── preload.js                # 预加载脚本（安全的 contextBridge）
+├── 直接打开用.html           # 渲染进程界面（也可在浏览器中独立运行）
+├── 开发过程记录.md            # 开发过程与技术选型记录
+├── SPEC.md                   # 功能规格说明
+├── package.json              # 项目配置与构建脚本
+├── CLAUDE.md                 # Claude Code 项目指南
+└── installer/                # 构建输出目录
 ```
+
+### 安全架构
+
+- `contextIsolation: true`，渲染进程无法直接访问 Node.js API
+- 主进程通过 `ipcMain.handle` 暴露文件操作
+- 预加载脚本通过 `contextBridge.exposeInMainWorld` 桥接 API
 
 ## 支持的 Markdown 语法
 
@@ -116,8 +136,8 @@ markdown-editor-reader/
 - 粗体：`**文本**`
 - 斜体：`*文本*`
 - 删除线：`~~文本~~`
-- 代码块：\`\`\`代码\`\`\`
-- 行内代码：\`代码\`
+- 代码块：`` ```代码``` ``
+- 行内代码：`` `代码` ``
 - 链接：`[文本](URL)`
 - 图片：`![替代文本](URL)`
 - 引用：`> 引用内容`

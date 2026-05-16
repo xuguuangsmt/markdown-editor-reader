@@ -42,7 +42,6 @@
             background: var(--bg-surface);
             border-bottom: 1px solid var(--border-color);
             flex-shrink: 0;
-            -webkit-app-region: drag;
         }
 
         .header-left {
@@ -66,7 +65,6 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            -webkit-app-region: no-drag;
         }
 
         .btn {
@@ -326,6 +324,10 @@
         .preview-content del {
             opacity: 0.6;
         }
+
+        .hidden-input {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -367,6 +369,8 @@
         </div>
     </main>
 
+    <input type="file" class="hidden-input" id="fileInput" accept=".md,.markdown,.txt">
+
     <script>
         const emptyState = document.getElementById('emptyState');
         const readingView = document.getElementById('readingView');
@@ -374,6 +378,7 @@
         const readingContent = document.getElementById('readingContent');
         const previewContent = document.getElementById('previewContent');
         const editorTextarea = document.getElementById('editorTextarea');
+        const fileInput = document.getElementById('fileInput');
         const fileNameDisplay = document.getElementById('fileName');
         const readModeBtn = document.getElementById('readModeBtn');
         const editModeBtn = document.getElementById('editModeBtn');
@@ -383,7 +388,18 @@
         let currentMode = 'reading';
         let currentContent = '';
         let currentFileName = null;
+        let currentFileHandle = null;
         let debounceTimer = null;
+
+        function loadContent(content, fileName) {
+            currentContent = content;
+            currentFileName = fileName;
+            editorTextarea.value = content;
+            fileNameDisplay.textContent = fileName;
+            emptyState.style.display = 'none';
+            setMode('reading');
+            readingContent.innerHTML = parseMarkdown(content);
+        }
 
         function parseMarkdown(text) {
             if (!text) return '';
@@ -507,29 +523,108 @@
         }
 
         async function handleOpenFile() {
-            const result = await window.electronAPI.openFile();
-            if (result) {
-                currentContent = result.content;
-                currentFileName = result.filePath.split(/[/\\]/).pop();
-                editorTextarea.value = currentContent;
-                fileNameDisplay.textContent = currentFileName;
-                emptyState.style.display = 'none';
-                setMode('reading');
-                readingContent.innerHTML = parseMarkdown(currentContent);
+            try {
+                const options = {
+                    types: [
+                        {
+                            description: 'Markdown Files',
+                            accept: {
+                                'text/markdown': ['.md', '.markdown', '.txt']
+                            }
+                        }
+                    ]
+                };
+
+                const [fileHandle] = await window.showOpenFilePicker(options);
+                const file = await fileHandle.getFile();
+                const content = await file.text();
+
+                currentFileHandle = fileHandle;
+                loadContent(content, file.name);
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Error opening file:', err);
+                }
             }
         }
 
         async function handleSaveFile() {
             const content = editorTextarea.value;
-            const savedPath = await window.electronAPI.saveFile(content);
-            if (savedPath) {
-                currentFileName = savedPath.split(/[/\\]/).pop();
-                fileNameDisplay.textContent = currentFileName;
+
+            try {
+                if (currentFileHandle) {
+                    const writable = await currentFileHandle.createWritable();
+                    await writable.write(content);
+                    await writable.close();
+                } else {
+                    const options = {
+                        suggestedName: currentFileName || 'untitled.md',
+                        types: [
+                            {
+                                description: 'Markdown Files',
+                                accept: { 'text/markdown': ['.md'] }
+                            }
+                        ]
+                    };
+                    const fileHandle = await window.showSaveFilePicker(options);
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(content);
+                    await writable.close();
+                    currentFileHandle = fileHandle;
+                    currentFileName = fileHandle.name;
+                    fileNameDisplay.textContent = currentFileName;
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Error saving file:', err);
+                }
             }
         }
 
-        openBtn.addEventListener('click', handleOpenFile);
-        saveBtn.addEventListener('click', handleSaveFile);
+        openBtn.addEventListener('click', () => {
+            if (window.electronAPI) {
+                window.electronAPI.openFile().then(result => {
+                    if (result) {
+                        loadContent(result.content, result.filePath.split(/[/\\]/).pop());
+                    }
+                });
+            } else if (window.showOpenFilePicker) {
+                handleOpenFile();
+            } else {
+                fileInput.click();
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    loadContent(event.target.result, file.name);
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        saveBtn.addEventListener('click', () => {
+            if (window.electronAPI) {
+                window.electronAPI.saveFile(editorTextarea.value).then(filePath => {
+                    if (filePath) {
+                        fileNameDisplay.textContent = filePath.split(/[/\\]/).pop();
+                    }
+                });
+            } else if (window.showSaveFilePicker) {
+                handleSaveFile();
+            } else {
+                const blob = new Blob([editorTextarea.value], { type: 'text/markdown' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = currentFileName || 'untitled.md';
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        });
 
         readModeBtn.addEventListener('click', () => setMode('reading'));
         editModeBtn.addEventListener('click', () => setMode('edit'));
@@ -539,11 +634,25 @@
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
                 if (e.key === 'o') {
-                    e.preventDefault();
-                    handleOpenFile();
+                    if (!window.electronAPI) {
+                        e.preventDefault();
+                        handleOpenFile();
+                    }
                 } else if (e.key === 's') {
-                    e.preventDefault();
-                    handleSaveFile();
+                    if (!window.electronAPI) {
+                        e.preventDefault();
+                        if (window.showSaveFilePicker) {
+                            handleSaveFile();
+                        } else {
+                            const blob = new Blob([editorTextarea.value], { type: 'text/markdown' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = currentFileName || 'untitled.md';
+                            a.click();
+                            URL.revokeObjectURL(url);
+                        }
+                    }
                 } else if (e.key === 'e') {
                     e.preventDefault();
                     setMode(currentMode === 'reading' ? 'edit' : 'reading');
@@ -551,15 +660,24 @@
             }
         });
 
-        window.electronAPI.onFileOpened((data) => {
-            currentContent = data.content;
-            currentFileName = data.filePath.split(/[/\\]/).pop();
-            editorTextarea.value = currentContent;
-            fileNameDisplay.textContent = currentFileName;
-            emptyState.style.display = 'none';
-            setMode('reading');
-            readingContent.innerHTML = parseMarkdown(currentContent);
-        });
+        if (window.electronAPI) {
+            window.electronAPI.onFileOpened((data) => {
+                loadContent(data.content, data.filePath.split(/[/\\]/).pop());
+            });
+            window.electronAPI.onMenuAction(async (action) => {
+                if (action === 'save') {
+                    const filePath = await window.electronAPI.saveFile(editorTextarea.value);
+                    if (filePath) {
+                        fileNameDisplay.textContent = filePath.split(/[/\\]/).pop();
+                    }
+                } else if (action === 'save-as') {
+                    const filePath = await window.electronAPI.saveFileAs(editorTextarea.value);
+                    if (filePath) {
+                        fileNameDisplay.textContent = filePath.split(/[/\\]/).pop();
+                    }
+                }
+            });
+        }
 
         setMode('reading');
     </script>
